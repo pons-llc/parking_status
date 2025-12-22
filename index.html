@@ -48,7 +48,7 @@
     <script>
         let map;
         // データの流し込み
-        const locations = [{"rowNum":2,"id":1,"name":"第一駐車場","lat":35.732422,"lng":139.742861,"status":"空き"},{"rowNum":3,"id":2,"name":"第二駐車場","lat":35.66834,"lng":139.762573,"status":"混雑"},{"rowNum":4,"id":3,"name":"第三駐車場","lat":35.683401,"lng":139.755707,"status":"満車"}];
+        const locations = [{"rowNum":2,"id":1,"name":"第一駐車場","lat":35.3613424,"lng":139.4724624,"status":"空き"},{"rowNum":3,"id":2,"name":"第二駐車場","lat":35.3607581,"lng":139.4543753,"status":"満車"}];
         let points = [];
 
         window.onload = function() {
@@ -71,10 +71,7 @@
 
             if (points.length > 0) {
                 const bounds = L.latLngBounds(points);
-                map.fitBounds(bounds, {
-                    padding: [50, 50],
-                    maxZoom: 15
-                });
+                map.fitBounds(bounds);
             }
         }
 
