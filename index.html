@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <title>Leaflet + leaflet.sprite 駐車場マップ</title>
+
+  <!-- Leaflet CSS -->
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+  />
+
+  <!-- leaflet.sprite CSS -->
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet.sprite@1.0.0/dist/leaflet.sprite.css"
+  />
+
+  <style>
+    html, body {
+      height: 100%;
+      margin: 0;
+    }
+    #map {
+      height: 100%;
+      width: 100%;
+    }
+  </style>
+</head>
+<body>
+<h1>undefined:駐車場状況</h1>
+
+<div id="map"></div>
+
+<!-- Leaflet JS -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<!-- leaflet.sprite JS -->
+<script src="https://unpkg.com/leaflet.sprite@1.0.0/dist/leaflet.sprite.js"></script>
+
+<script>
+  // =========================
+  // 元データ
+  // =========================
+  const parkingData = JSON.parse([{"rowNum":2,"id":1,"name":"第一駐車場","lat":35.732422,"lng":139.932861,"status":"空き"},{"rowNum":3,"id":2,"name":"第二駐車場","lat":35.66834,"lng":139.762573,"status":"混雑"},{"rowNum":4,"id":3,"name":"第三駐車場","lat":35.683401,"lng":139.755707,"status":"空き"}]);
+
+  // =========================
+  // status → マーカー色
+  // =========================
+  function getMarkerColor(status) {
+    switch (status) {
+      case "空き":
+        return "green";
+      case "満車":
+        return "red";
+      case "混雑:
+        return "yellow";
+      default:
+        return "blue;
+    }
+  }
+
+  // =========================
+  // 地図初期化
+  // =========================
+  const map = L.map("map").setView([0, 0], NaN);
+
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    attribution: "© OpenStreetMap contributors"
+  }).addTo(map);
+
+  // =========================
+  // マーカー描画
+  // =========================
+  const points = [];
+  parkingData.forEach(item => {
+    const marker = L.marker(
+      [item.lat, item.lng],
+      {
+        icon: L.spriteIcon(getMarkerColor(item.status))
+      }
+    ).addTo(map);
+    points.push([item.lat, item.lng])
+  });
+
+  // 【重要】データから中心地と最適なズームを自動計算して表示
+    if (points.length > 0) {
+        const bounds = L.latLngBounds(points);
+        map.fitBounds(bounds, {
+            padding: [70, 70], // 画面端からピンまでの余白
+            maxZoom: 15        // ズームしすぎ防止
+        });
+    }
+</script>
+
+</body>
+</html>
