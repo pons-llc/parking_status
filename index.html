@@ -1,97 +1,111 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="utf-8" />
-  <title>Leaflet + leaflet.sprite 駐車場マップ</title>
-
-  <!-- Leaflet CSS -->
-  <link
-    rel="stylesheet"
-    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-  />
-
-  <!-- leaflet.sprite CSS -->
-  <link
-    rel="stylesheet"
-    href="https://unpkg.com/leaflet.sprite@1.0.0/dist/leaflet.sprite.css"
-  />
-
-  <style>
-    html, body {
-      height: 100%;
-      margin: 0;
-    }
-    #map {
-      height: 100%;
-      width: 100%;
-    }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>undefined</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        #map {
+            height: calc(100vh - 80px);
+            width: 100%;
+            z-index: 1;
+        }
+        .status-marker {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            border: 2px solid white;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+            font-weight: bold;
+            color: white;
+            font-size: 14px;
+        }
+        .status-empty { background-color: #10b981; }
+        .status-crowded { background-color: #f59e0b; }
+        .status-full { background-color: #ef4444; }
+    </style>
 </head>
-<body>
-<h1>undefined:駐車場状況</h1>
+<body class="bg-gray-50 flex flex-col h-screen overflow-hidden">
 
-<div id="map"></div>
+    <header class="bg-white shadow-sm p-4 flex justify-between items-center z-10">
+        <h1 class="text-lg font-bold text-gray-800">undefined</h1>
+        <div class="flex gap-2 text-xs font-medium">
+            <span class="flex items-center gap-1"><span class="w-3 h-3 rounded-full bg-emerald-500"></span>空き</span>
+            <span class="flex items-center gap-1"><span class="w-3 h-3 rounded-full bg-amber-500"></span>混雑</span>
+            <span class="flex items-center gap-1"><span class="w-3 h-3 rounded-full bg-red-500"></span>満車</span>
+        </div>
+    </header>
 
-<!-- Leaflet JS -->
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <main class="flex-grow relative">
+        <div id="map"></div>
+    </main>
 
-<!-- leaflet.sprite JS -->
-<script src="https://unpkg.com/leaflet.sprite@1.0.0/dist/leaflet.sprite.js"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
-<script>
-  // =========================
-  // 元データ
-  // =========================
-  const parkingData = [{"rowNum":2,"id":1,"name":"第一駐車場","lat":35.732422,"lng":139.932861,"status":"空き"},{"rowNum":3,"id":2,"name":"第二駐車場","lat":35.66834,"lng":139.762573,"status":"混雑"},{"rowNum":4,"id":3,"name":"第三駐車場","lat":35.683401,"lng":139.755707,"status":"空き"}];
+    <script>
+        let map;
+        // データの流し込み
+        const locations = [{"rowNum":2,"id":1,"name":"第一駐車場","lat":35.732422,"lng":139.932861,"status":"空き"},{"rowNum":3,"id":2,"name":"第二駐車場","lat":35.66834,"lng":139.762573,"status":"混雑"},{"rowNum":4,"id":3,"name":"第三駐車場","lat":35.683401,"lng":139.755707,"status":"空き"}];
+        let points = [];
 
-  // =========================
-  // status → マーカー色
-  // =========================
-  function getMarkerColor(status) {
-    switch (status) {
-      case "空き":
-        return "green";
-      case "満車":
-        return "red";
-      case "混雑:
-        return "yellow";
-      default:
-        return "blue;
-    }
-  }
+        window.onload = function() {
+            initMap();
+        };
 
-  // =========================
-  // 地図初期化
-  // =========================
-  const map = L.map("map").setView([0, 0], NaN);
+        function initMap() {
+            map = L.map('map', { zoomControl: false });
 
-  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    attribution: "© OpenStreetMap contributors"
-  }).addTo(map);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; OpenStreetMap contributors'
+            }).addTo(map);
 
-  // =========================
-  // マーカー描画
-  // =========================
-  const points = [];
-  parkingData.forEach(item => {
-    const marker = L.marker(
-      [item.lat, item.lng],
-      {
-        icon: L.spriteIcon(getMarkerColor(item.status))
-      }
-    ).addTo(map);
-    points.push([item.lat, item.lng])
-  });
+            L.control.zoom({ position: 'bottomright' }).addTo(map);
 
-  // 【重要】データから中心地と最適なズームを自動計算して表示
-    if (points.length > 0) {
-        const bounds = L.latLngBounds(points);
-        map.fitBounds(bounds, {
-            padding: [70, 70], // 画面端からピンまでの余白
-            maxZoom: 15        // ズームしすぎ防止
-        });
-    }
-</script>
+            locations.forEach(loc => {
+                addStatusMarker(loc);
+                points.push([loc.lat, loc.lng]);
+            });
 
+            if (points.length > 0) {
+                const bounds = L.latLngBounds(points);
+                map.fitBounds(bounds, {
+                    padding: [50, 50],
+                    maxZoom: 15
+                });
+            }
+        }
+
+        function addStatusMarker(loc) {
+            let statusClass = '';
+            let statusLabel = loc.status;
+            
+            // ステータス判定（スプレッドシートの値に合わせる）
+            if (loc.status === '空き' || loc.status === '空') statusClass = 'status-empty';
+            else if (loc.status === '混雑' || loc.status === '混') statusClass = 'status-crowded';
+            else if (loc.status === '満車' || loc.status === '満') statusClass = 'status-full';
+
+            const customIcon = L.divIcon({
+                className: 'status-marker ' + statusClass,
+                html: '<span>' + statusLabel.substring(0,1) + '</span>',
+                iconSize: [36, 36],
+                iconAnchor: [18, 18]
+            });
+
+            const marker = L.marker([loc.lat, loc.lng], { icon: customIcon }).addTo(map);
+
+            const popupContent = `
+                <div class="p-1">
+                    <h3 class="font-bold text-gray-800">${loc.name}</h3>
+                    <p class="text-sm">状況: ${loc.status}</p>
+                    <a href="https://www.google.com/maps/dir/?api=1&destination=${loc.lat},${loc.lng}" 
+                       target="_blank" class="text-blue-500 text-xs mt-2 block">🚗 ルート案内</a>
+                </div>
+            `;
+            marker.bindPopup(popupContent);
+        }
+    </script>
 </body>
 </html>
