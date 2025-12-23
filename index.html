@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>undefined</title>
+    <title>○○市市民祭り</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
@@ -31,7 +31,7 @@
 <body class="bg-gray-50 flex flex-col h-screen overflow-hidden">
 
     <header class="bg-white shadow-sm p-4 flex justify-between items-center z-10">
-        <h1 class="text-lg font-bold text-gray-800">undefined</h1>
+        <h1 class="text-lg font-bold text-gray-800">○○市市民祭り</h1>
         <div class="flex gap-2 text-xs font-medium">
             <span class="flex items-center gap-1"><span class="w-3 h-3 rounded-full bg-emerald-500"></span>空き</span>
             <span class="flex items-center gap-1"><span class="w-3 h-3 rounded-full bg-amber-500"></span>混雑</span>
@@ -48,7 +48,7 @@
     <script>
         let map;
         // データの流し込み
-        const locations = [{"rowNum":2,"id":1,"name":"第一駐車場","lat":35.3613424,"lng":139.4724624,"status":"空き"},{"rowNum":3,"id":2,"name":"第二駐車場","lat":35.3607581,"lng":139.4543753,"status":"満車"}];
+        const locations = [{"rowNum":2,"id":1,"name":"第一駐車場","lat":35.3611961121748,"lng":139.472717642784,"status":"空き"},{"rowNum":3,"id":2,"name":"第二駐車場","lat":35.361033,"lng":139.472868,"status":"満車"},{"rowNum":4,"id":3,"name":"第三駐車場","lat":35.3612967322779,"lng":139.472186565399,"status":"混雑"}];
         let points = [];
 
         window.onload = function() {
