@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    body { margin: 0; font-family: sans-serif; }
+    .park-header {
+      background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%); /* 深みのある青のグラデーション */
+      color: white;
+      padding: 15px 20px;
+      text-align: center;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+      position: relative;
+      z-index: 1000;
+    }
+
+    /* Leafletのデフォルトスタイルをリセット */
+.leaflet-div-icon {
+  background: none !important;
+  border: none !important;
+}
+
+    .park-header h1 {
+      margin: 0;
+      font-size: 1.25rem;
+      letter-spacing: 1px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px; /* アイコンと文字の間隔 */
+    }
+
+    /* ついでにカードのデザインも少しモダンに */
+    #card {
+      height: 40vh;
+      padding: 25px 20px;
+      box-sizing: border-box;
+      background: white;
+      display: none;
+      border-top-left-radius: 20px; /* 角を丸く */
+      border-top-right-radius: 20px;
+      box-shadow: 0 -5px 20px rgba(0,0,0,0.1);
+      border-top: none;
+    }
+    #map { height: 60vh; width: 100%; }
+
+    .btn-group { display: flex; gap: 10px; margin-top: 15px; }
+    button {
+      flex: 1;
+      padding: 15px;
+      border: none;
+      border-radius: 5px;
+      color: white;
+      font-weight: bold;
+      cursor: pointer;
+      transition: all 0.2s;
+      opacity: 0.6;
+    }
+    .btn-empty { background: #28a745; }
+    .btn-crowd { background: #ffc107; color: black; }
+    .btn-full { background: #dc3545; }
+
+    .btn-empty.active { background: #1b5e20; opacity: 1; box-shadow: 0 0 0 3px #1b5e20, inset 0 0 10px rgba(0,0,0,0.5); }
+    .btn-crowd.active { background: #ffa000; opacity: 1; box-shadow: 0 0 0 3px #ffa000, inset 0 0 10px rgba(0,0,0,0.5); }
+    .btn-full.active { background: #b71c1c; opacity: 1; box-shadow: 0 0 0 3px #b71c1c, inset 0 0 10px rgba(0,0,0,0.5); }
+    button.active { transform: scale(1.05); }
+
+    /* --- ローディングモーダルのスタイル --- */
+    #loading-modal {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0,0,0,0.5);
+      z-index: 9999;
+      justify-content: center;
+      align-items: center;
+      color: white;
+      flex-direction: column;
+    }
+    .spinner {
+      width: 50px; height: 50px;
+      border: 5px solid rgba(255,255,255,0.3);
+      border-top: 5px solid #fff;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin-bottom: 10px;
+    }
+    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+    /* --- パルシングアニメーションのスタイル --- */
+    .pulse-marker {
+      background: rgba(0, 123, 255, 0.4);
+      border-radius: 50%;
+      box-shadow: 0 0 0 rgba(0, 123, 255, 0.4);
+      animation: pulse 1.5s infinite;
+    }
+    @keyframes pulse {
+      0% { box-shadow: 0 0 0 0px rgba(0, 123, 255, 0.7); }
+      70% { box-shadow: 0 0 0 20px rgba(0, 123, 255, 0); }
+      100% { box-shadow: 0 0 0 0px rgba(0, 123, 255, 0); }
+    }
+    .custom-pin { overflow: visible !important; } /* 波紋が切れないように */
+  </style>
+</head>
+<body>
+<div class="park-header"><h1 style="color:white">🚙駐車場管理システム</h1></div>
+
+<div id="loading-modal">
+  <div class="spinner"></div>
+  <div>更新中...</div>
+</div>
+
+<div id="map"></div>
+
+<div id="card">
+  <h3 id="p-name">駐車場名</h3>
+  <p>現在の状態: <span id="p-status"></span></p>
+  <div class="btn-group">
+    <button id="btn-empty" class="btn-empty" onclick="updateStatus('空き')">空き</button>
+    <button id="btn-crowd" class="btn-crowd" onclick="updateStatus('混雑')">混雑</button>
+    <button id="btn-full" class="btn-full" onclick="updateStatus('満車')">満車</button>
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+  let map;
+  let currentData = null;
+  let markers = [];
+  let selectedMarker = null; // 選択中のマーカーを保持
+
+  const statusColors = {
+    '空き': '#28a745',
+    '混雑': '#ffc107',
+    '満車': '#dc3545'
+  };
+
+
+  window.onload = () => {
+    map = L.map('map').setView([0, 0],15);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(map);
+
+    map.on('click', hideCard);
+    loadMarkers();
+  };
+
+  
+
+
+  function createCustomIcon(color, isSelected) {
+    const svgHtml = `
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 42" width="32" height="42">
+        <path fill="${color}" stroke="#fff" stroke-width="2" d="M16 0C7.2 0 0 7.2 0 16c0 10.5 16 26 16 26s16-15.5 16-26c0-8.8-7.2-16-16-16z"/>
+        <circle fill="white" cx="16" cy="16" r="6"/>
+      </svg>
+    `;
+    // 選択中なら pulse-marker クラスを付与
+    const className = isSelected ? 'custom-pin pulse-marker' : 'custom-pin';
+    
+    return L.divIcon({
+      html: svgHtml,
+      className: className,
+      iconSize: [32, 42],
+      iconAnchor: [16, 42]
+    });
+  }
+
+  function loadMarkers() {
+    google.script.run.withSuccessHandler((result) => {
+      if (!result) return;
+      
+      // 既存のマーカーをクリア
+      markers.forEach(m => map.removeLayer(m));
+      markers = [];
+
+      let points = [];
+
+      result.forEach(p => {
+        // 現在選択中のデータと同じ行番号ならisSelectedをtrueに
+        const isSelected = currentData && currentData.rowNum === p.rowNum;
+        
+        const marker = L.marker([p.lat, p.lng], {
+          icon: createCustomIcon(statusColors[p.status] || '#cccccc', isSelected)
+        }).addTo(map);
+
+        if (isSelected) selectedMarker = marker;
+
+        marker.on('click', (e) => {
+          L.DomEvent.stopPropagation(e);
+          showCard(p, marker);
+        });
+        markers.push(marker);
+        points.push([p.lat, p.lng])
+      });
+
+      map.fitBounds(points)
+    }).getParkingData();
+  }
+
+  function showCard(p, marker) {
+    // 前の選択のパルスを消すために再描画
+    if (currentData) {
+        const prevData = currentData;
+        currentData = null; // 一時的にnullにしてパルス判定をリセット
+        loadMarkers();
+    }
+
+    currentData = p;
+    selectedMarker = marker;
+    
+    document.getElementById('p-name').innerText = p.name;
+    document.getElementById('p-status').innerText = p.status;
+    document.getElementById('card').style.display = 'block';
+    updateButtonVisuals(p.status);
+    
+    // マーカーのアイコンをパルス付きに更新
+    marker.setIcon(createCustomIcon(statusColors[p.status], true));
+  }
+
+  function updateButtonVisuals(status) {
+    const buttons = document.querySelectorAll('.btn-group button');
+    buttons.forEach(btn => {
+      btn.classList.remove('active');
+      if (btn.innerText.trim() === status) {
+        btn.classList.add('active');
+      }
+    });
+  }
+
+  function hideCard() {
+    if (!currentData) return;
+    currentData = null;
+    if (selectedMarker) {
+        loadMarkers(); // パルスを消すために再描画
+    }
+    document.getElementById('card').style.display = 'none';
+  }
+
+  function updateStatus(status) {
+    if (!currentData) return;
+
+    // ローディング表示
+    document.getElementById('loading-modal').style.display = 'flex';
+
+    google.script.run
+      .withSuccessHandler(() => {
+        currentData.status = status;
+        document.getElementById('p-status').innerText = status;
+        updateButtonVisuals(status);
+        
+        // 完了したらローディングを隠してマーカー更新
+        document.getElementById('loading-modal').style.display = 'none';
+        loadMarkers(); 
+      })
+      .withFailureHandler((err) => {
+        alert("更新に失敗しました: " + err);
+        document.getElementById('loading-modal').style.display = 'none';
+      })
+      .updateStatus(currentData.rowNum, status);
+  }
+</script>
+</body>
+</html>

@@ -1,0 +1,222 @@
+const props = PropertiesService.getScriptProperties();
+
+// --- スプレッドシート設定 ---
+const SS_URL = props.getProperty("SS_URL");     // スプレッドシートのURL
+
+function doGet() {
+
+  const template = HtmlService.createTemplateFromFile('index');
+
+  return template.evaluate()
+    .setTitle('駐車場管理システム')
+    .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+}
+
+// --- 共通: シート取得ヘルパー ---
+function getSheet() {
+  // --- 設定読み込み ---
+
+const SHEET_NAME = 'シート1';
+  if (!SS_URL) {
+    throw new Error("スクリプトプロパティ 'SS_URL' が設定されていません。");
+  }
+  const ss = SpreadsheetApp.openByUrl(SS_URL);
+  const sheet = ss.getSheetByName(SHEET_NAME);
+  if (!sheet) {
+     throw new Error(`シート '${SHEET_NAME}' が見つかりません。シート名を確認してください。`);
+  }
+  return sheet;
+}
+
+function getParkingData() {
+  const ss = SpreadsheetApp.openByUrl(SS_URL);
+  const sheet = ss.getSheetByName("シート1");
+  const data = sheet.getDataRange().getValues();
+  const headers = data.shift();
+
+  const result = data.map((row, index) => ({
+    rowNum: index + 2,
+    id: row[0],
+    name: row[1],
+    lat: row[2],
+    lng: row[3],
+    status: row[4]
+  }));
+  Logger.log(result)
+  return result;
+}
+
+// ステータスの更新
+function updateStatus(rowNum, newStatus) {
+  const ss = SpreadsheetApp.openByUrl(SS_URL);
+  const sheet = ss.getSheetByName("シート1");
+  
+  sheet.getRange(rowNum, 5).setValue(newStatus); // E列: status
+  return "更新完了";
+}
+
+function deployToGithub() {
+  //const props = PropertiesService.getScriptProperties();
+
+  // --- GIthub設定 ---
+  const CONFIG = {
+    TOKEN: props.getProperty('GITHUB_API_TOKEN'), // GitHub Personal Access Token
+    USER: props.getProperty('GITHUB_USER'),       // GitHubのユーザー名
+    REPO: props.getProperty('GITHUB_REPO'),       // リポジトリ名
+    FILE_PATH: 'index.html',                       // 保存するファイル名
+    BRANCH: 'main'                                // ブランチ名
+  };
+
+  // 1. スプレッドシートからデータを取得
+  const parkingData = getParkingData(); 
+
+  Logger.log(props.getProperty("TITLE"))
+
+  // 2. HTMLのテンプレートを作成（ここでデータをJS変数として埋め込む）
+  const htmlContent = generateHtml(props.getProperty("TITLE"),parkingData);
+
+  // 3. GitHub APIで現在のファイルのSHA（指紋）を取得（更新に必要）
+  const url = `https://api.github.com/repos/${CONFIG.USER}/${CONFIG.REPO}/contents/${CONFIG.FILE_PATH}`;
+  const getRes = UrlFetchApp.fetch(url, {
+    method: "get",
+    headers: { "Authorization": "token " + CONFIG.TOKEN },
+    muteHttpExceptions: true
+  });
+
+  let sha = "";
+  if (getRes.getResponseCode() === 200) {
+    sha = JSON.parse(getRes.getContentText()).sha;
+  }
+
+  // 4. GitHubへプッシュ（PUT）
+  const payload = {
+    message: "Update parking data via GAS",
+    content: Utilities.base64Encode(htmlContent, Utilities.Charset.UTF_8),
+    sha: sha // 新規作成なら不要だが、更新なら必須
+  };
+
+  const options = {
+    method: "put",
+    headers: { "Authorization": "token " + CONFIG.TOKEN },
+    contentType: "application/json",
+    payload: JSON.stringify(payload)
+  };
+
+  const res = UrlFetchApp.fetch(url, options);
+  Logger.log("Deploy Result: " + res.getResponseCode());
+}
+
+function generateHtml(title, data) {
+  // オブジェクトをJSON文字列に変換
+  const jsonData = JSON.stringify(data);
+
+  const template = `<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>${title}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        #map {
+            height: calc(100vh - 80px);
+            width: 100%;
+            z-index: 1;
+        }
+        .status-marker {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            border: 2px solid white;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+            font-weight: bold;
+            color: white;
+            font-size: 14px;
+        }
+        .status-empty { background-color: #10b981; }
+        .status-crowded { background-color: #f59e0b; }
+        .status-full { background-color: #ef4444; }
+    </style>
+</head>
+<body class="bg-gray-50 flex flex-col h-screen overflow-hidden">
+
+    <header class="bg-white shadow-sm p-4 flex justify-between items-center z-10">
+        <h1 class="text-lg font-bold text-gray-800">${title}</h1>
+        <div class="flex gap-2 text-xs font-medium">
+            <span class="flex items-center gap-1"><span class="w-3 h-3 rounded-full bg-emerald-500"></span>空き</span>
+            <span class="flex items-center gap-1"><span class="w-3 h-3 rounded-full bg-amber-500"></span>混雑</span>
+            <span class="flex items-center gap-1"><span class="w-3 h-3 rounded-full bg-red-500"></span>満車</span>
+        </div>
+    </header>
+
+    <main class="flex-grow relative">
+        <div id="map"></div>
+    </main>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <script>
+        let map;
+        // データの流し込み
+        const locations = ${jsonData};
+        let points = [];
+
+        window.onload = function() {
+            initMap();
+        };
+
+        function initMap() {
+            map = L.map('map', { zoomControl: false });
+
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; OpenStreetMap contributors'
+            }).addTo(map);
+
+            L.control.zoom({ position: 'bottomright' }).addTo(map);
+
+            locations.forEach(loc => {
+                addStatusMarker(loc);
+                points.push([loc.lat, loc.lng]);
+            });
+
+            if (points.length > 0) {
+                const bounds = L.latLngBounds(points);
+                map.fitBounds(bounds);
+            }
+        }
+
+        function addStatusMarker(loc) {
+            let statusClass = 'status-empty';
+            let statusLabel = loc.status;
+            
+            // ステータス判定（スプレッドシートの値に合わせる）
+            if (loc.status === '空き' || loc.status === '空') statusClass = 'status-empty';
+            else if (loc.status === '混雑' || loc.status === '混') statusClass = 'status-crowded';
+            else if (loc.status === '満車' || loc.status === '満') statusClass = 'status-full';
+
+            const customIcon = L.divIcon({
+                className: 'status-marker ' + statusClass,
+                html: '<span>' + statusLabel.substring(0,1) + '</span>',
+                iconSize: [36, 36],
+                iconAnchor: [18, 18]
+            });
+
+            const marker = L.marker([loc.lat, loc.lng], { icon: customIcon }).addTo(map);
+
+            const popupContent = \`
+                <div class="p-1">
+                    <h3 class="font-bold text-gray-800">\${loc.name}</h3>
+                    <p class="text-sm">状況: \${loc.status}</p>
+                    <a href="https://www.google.com/maps/dir/?api=1&destination=\${loc.lat},\${loc.lng}" 
+                       target="_blank" class="text-blue-500 text-xs mt-2 block">🚗 ルート案内</a>
+                </div>
+            \`;
+            marker.bindPopup(popupContent);
+        }
+    </script>
+</body>
+</html>`;
+  return template;
+}
